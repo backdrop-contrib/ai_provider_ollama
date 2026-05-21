@@ -1,10 +1,10 @@
-# OpenAI Ollama Provider
+# AI Provider Ollama
 
-This module integrates [Ollama](https://ollama.ai/) with the OpenAI module, allowing you to run AI models locally on your own hardware without requiring external API keys or sending data to third-party services.
+This module integrates [Ollama](https://ollama.ai/) with the AI module, allowing you to run AI models locally on your own hardware without requiring external API keys or sending data to third-party services.
 
 ## What is Ollama?
 
-Ollama is a tool that lets you run large language models (LLMs) locally. It provides an OpenAI-compatible API, making integration seamless. With Ollama, you can run models like:
+Ollama is a tool that lets you run large language models (LLMs) locally. It provides an shared-chat-compatible API, making integration seamless. With Ollama, you can run models like:
 
 - **Llama 3.2** - Meta's latest open model
 - **Mistral** - High-performance models from Mistral AI
@@ -18,13 +18,13 @@ Ollama is a tool that lets you run large language models (LLMs) locally. It prov
 - 🏠 **Run AI models locally** - No data leaves your server
 - 🔒 **Privacy-focused** - Complete control over your data
 - 🆓 **No API costs** - Free to use, only requires local compute
-- 🔌 **OpenAI-compatible** - Drop-in replacement for many use cases
+- 🔌 **shared-chat-compatible** - Drop-in replacement for many use cases
 - ⚡ **Fast** - Low latency with local inference
 - 📦 **Easy setup** - Simple installation and configuration
 
 ## Requirements
 
-- OpenAI module (parent module)
+- AI module (parent module)
 - Ollama installed on your server or local machine
 - PHP 7.4+ with appropriate extensions
 
@@ -70,7 +70,7 @@ curl http://localhost:11434/api/tags
 ### 4. Enable the Module
 
 ```bash
-bee en openai_ollama
+bee en ai_provider_ollama
 bee cc all
 ```
 
@@ -78,21 +78,21 @@ Or enable via the UI at `/admin/modules`.
 
 ### 5. Configure
 
-1. Go to `/admin/config/openai/settings`
+1. Go to `/admin/config/ai/settings`
 2. Select **"Ollama (Local Models)"** as your AI Provider
 3. Select any API key (it won't be used, but the field is required)
 4. Save configuration
 
-5. (Optional) Go to `/admin/config/openai/ollama` to configure the Ollama server URL if it's not running on localhost
+5. (Optional) Go to `/admin/config/ai/ollama` to configure the Ollama server URL if it's not running on localhost
 
 ## Usage
 
-Once configured, all OpenAI module functionality that depends on chat/completion will work with your local Ollama models:
+Once configured, all AI module functionality that depends on chat/completion will work with your local Ollama models:
 
 - Content generation
 - Chat interfaces
 - Text processing
-- Any custom implementations using the OpenAI module
+- Any custom implementations using the AI module
 
 ### Model Selection
 
@@ -110,7 +110,7 @@ When using submodules or features that allow model selection, you'll see your lo
 
 By default, the module connects to `http://localhost:11434`. If your Ollama server is running elsewhere:
 
-1. Go to `/admin/config/openai/ollama`
+1. Go to `/admin/config/ai/ollama`
 2. Update the **Base URL** to your Ollama server location
 3. Save configuration
 
@@ -134,7 +134,7 @@ By default, the module connects to `http://localhost:11434`. If your Ollama serv
 - Speech-to-text
 - Moderation
 
-These features are not available through Ollama's OpenAI-compatible API.
+These features are not available through Ollama's shared-chat-compatible API.
 
 ## Performance Considerations
 
@@ -170,7 +170,7 @@ Model performance depends on your hardware:
 1. Verify Ollama is running: `curl http://localhost:11434/api/tags`
 2. Check you've pulled models: `ollama list`
 3. Clear Backdrop caches: `bee cc all`
-4. Verify the base URL in `/admin/config/openai/ollama`
+4. Verify the base URL in `/admin/config/ai/ollama`
 
 ### Connection Refused
 
@@ -236,8 +236,8 @@ Then configure the module to use `http://ollama:11434` as the base URL.
 
 - [Ollama Documentation](https://github.com/ollama/ollama/blob/main/docs/README.md)
 - [Ollama Model Library](https://ollama.ai/library)
-- [OpenAI-Compatible API Docs](https://github.com/ollama/ollama/blob/main/docs/openai.md)
-- [OpenAI Module Documentation](../README.md)
+- [AI-Compatible API Docs](https://github.com/ollama/ollama/blob/main/docs/ai.md)
+- [AI Module Documentation](../README.md)
 - [Creating Custom Providers](../CREATING_PROVIDERS.md)
 
 ## Support

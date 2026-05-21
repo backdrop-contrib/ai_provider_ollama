@@ -1,6 +1,6 @@
-# OpenAI Ollama
+# AI Provider Ollama
 
-Ollama provider for the Backdrop CMS OpenAI module.
+Ollama local AI models provider for the Backdrop CMS AI module.
 
 ## Installation
 
@@ -8,7 +8,7 @@ Ollama provider for the Backdrop CMS OpenAI module.
 
 ## Issues
 
-Bugs and feature requests should be reported in the [Issue Queue](https://github.com/backdrop-contrib/openai_ollama/issues).
+Bugs and feature requests should be reported in the [Issue Queue](https://github.com/backdrop-contrib/ai_provider_ollama/issues).
 
 ## Current Maintainer
 
@@ -18,7 +18,8 @@ Bugs and feature requests should be reported in the [Issue Queue](https://github
 
 - Created for Backdrop CMS by [Justin Keiser](https://github.com/keiserjb).
 
+- Developed with AI assistance.
+
 ## License
 
 This project is GPL v2 software. See the LICENSE.txt file in this directory for complete text.
-

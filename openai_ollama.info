@@ -1,6 +1,0 @@
-name = OpenAI Ollama Provider
-description = Adds Ollama as an AI provider for the OpenAI module, enabling local LLM inference.
-backdrop = 1.x
-type = module
-package = OpenAI
-dependencies[] = openai
