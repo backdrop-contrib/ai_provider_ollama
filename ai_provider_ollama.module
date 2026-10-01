@@ -20,6 +20,33 @@ function ai_provider_ollama_autoload_info() {
 }
 
 /**
+ * Implements hook_ai_embedding_model_quirks().
+ *
+ * Declares per-model embedding quirks this provider's models require --
+ * e.g. nomic-embed-text was trained with "search_query: " / "search_document: "
+ * task prefixes and its own model card documents materially worse retrieval
+ * without them. Consumers (ai_search) look this registry up by model-name
+ * pattern instead of hardcoding per-model checks in their own code, so a
+ * future quirk for a different model is a new entry here (or in whichever
+ * provider owns that model), not another special case scattered through
+ * every caller.
+ *
+ * @return array
+ *   Keyed by a substring pattern matched against the model id. Each entry
+ *   may include:
+ *   - query_prefix: prepended to text embedded as a search query.
+ *   - document_prefix: prepended to text embedded as indexed content.
+ */
+function ai_provider_ollama_ai_embedding_model_quirks() {
+  return [
+    'nomic-embed-text' => [
+      'query_prefix'    => 'search_query: ',
+      'document_prefix' => 'search_document: ',
+    ],
+  ];
+}
+
+/**
  * Implements hook_ai_provider_info().
  */
 function ai_provider_ollama_ai_provider_info() {
@@ -73,6 +100,14 @@ function ai_provider_ollama_ai_provider_settings_alter(&$settings, $context) {
     '#weight' => 0,
   ];
 
+  $settings['capabilities_link'] = [
+    '#type' => 'markup',
+    '#markup' => '<p>' . t('Model capabilities are detected using Ollama\'s native API. <strong><a href="@url">Review or override model capabilities &raquo;</a></strong>', [
+      '@url' => url('admin/config/ai/settings/capabilities/ollama'),
+    ]) . '</p>' . ai_provider_capability_override_notice('ollama'),
+    '#weight' => 5,
+  ];
+
   $settings['ollama_help'] = [
     '#type' => 'markup',
     '#markup' => '<div class="description">' .
@@ -88,125 +123,6 @@ function ai_provider_ollama_ai_provider_settings_alter(&$settings, $context) {
       '</div>',
     '#weight' => 10,
   ];
-
-  // If Ollama is enabled in central config and an ollama_base_url is configured,
-  // attempt to fetch available models and show them in the settings UI.
-  $enabled = !empty($providers_root['ollama']['enabled']);
-  $base_url = !empty($providers_root['ollama']['ollama_base_url']) ? $providers_root['ollama']['ollama_base_url'] : $default_base_url;
-
-  if (!empty($enabled) && !empty($base_url)) {
-    try {
-      // First try the pluggable provider adapter if available.
-      $models = [];
-      $adapter = NULL;
-      if (function_exists('ai_get_api')) {
-        $adapter = ai_get_api('ollama');
-      }
-
-      if (!empty($adapter) && method_exists($adapter, 'getModels')) {
-        try {
-          $provider_models = $adapter->getModels();
-        }
-        catch (\Exception $e) {
-          watchdog('ai_provider_ollama', 'Ollama adapter getModels() failed: @msg', ['@msg' => $e->getMessage()], WATCHDOG_WARNING);
-          $provider_models = [];
-        }
-
-        if (!empty($provider_models) && is_array($provider_models)) {
-          foreach ($provider_models as $k => $v) {
-            if (is_int($k)) {
-              if (is_array($v)) {
-                $models[] = [
-                  'id' => isset($v['id']) ? (string) $v['id'] : (isset($v['name']) ? (string) $v['name'] : json_encode($v)),
-                  'display_name' => isset($v['display_name']) ? $v['display_name'] : (isset($v['id']) ? $v['id'] : NULL),
-                  'owned_by' => isset($v['owned_by']) ? $v['owned_by'] : NULL,
-                ];
-              }
-              else {
-                $models[] = ['id' => (string) $v];
-              }
-            }
-            else {
-              if (is_array($v)) {
-                $models[] = [
-                  'id' => (string) $k,
-                  'display_name' => isset($v['display_name']) ? $v['display_name'] : (isset($v['id']) ? $v['id'] : json_encode($v)),
-                  'owned_by' => isset($v['owned_by']) ? $v['owned_by'] : NULL,
-                ];
-              }
-              else {
-                $models[] = ['id' => (string) $k, 'display_name' => (string) $v];
-              }
-            }
-          }
-        }
-      }
-
-      // If adapter didn't yield models, fall back to the helper that calls
-      // the Ollama API directly.
-      if (empty($models)) {
-        $raw = ai_provider_ollama_get_models($base_url);
-        if (!empty($raw) && is_array($raw)) {
-          foreach ($raw as $m) {
-            if (is_string($m)) {
-              $models[] = ['id' => $m];
-            }
-            elseif (is_array($m)) {
-              $models[] = [
-                'id' => isset($m['id']) ? (string) $m['id'] : (isset($m['name']) ? (string) $m['name'] : json_encode($m)),
-                'display_name' => isset($m['display_name']) ? $m['display_name'] : (isset($m['id']) ? $m['id'] : NULL),
-                'owned_by' => isset($m['owned_by']) ? $m['owned_by'] : NULL,
-              ];
-            }
-          }
-        }
-      }
-
-      // Build list items for markup
-      $items = [];
-      foreach ($models as $m) {
-        $id = isset($m['id']) ? $m['id'] : (isset($m['name']) ? $m['name'] : json_encode($m));
-        $label = isset($m['display_name']) && $m['display_name'] ? $m['display_name'] : $id;
-        if (!empty($m['owned_by'])) {
-          $label .= ' (' . $m['owned_by'] . ')';
-        }
-        $items[] = '<li>' . check_plain($label) . '</li>';
-      }
-
-      // Place into form if we have any models, otherwise show a friendly message.
-      if (!empty($items)) {
-        if (isset($context['form']['providers'])) {
-          $provider_label = function_exists('ai_get_provider_label') ? ai_get_provider_label($context['provider']) : ucfirst($context['provider']);
-          $context['form']['providers'][$context['provider'] . '_settings'][$context['provider'] . '_models'] = [
-            '#type' => 'markup',
-            '#markup' => '<details class="provider-models"><summary><strong>' . check_plain($provider_label) . ' - ' . count($items) . ' models</strong></summary>'
-              . '<div style="max-height:300px; overflow:auto; padding-left:1.2em; margin-top:0.5em;"><ul style="margin:0; padding-left:1.2em;">'
-              . implode('', $items) . '</ul></div></details>',
-            '#weight' => 100,
-          ];
-        }
-      }
-      else {
-        if (isset($context['form']['providers'])) {
-          $context['form']['providers'][$context['provider'] . '_settings'][$context['provider'] . '_models'] = [
-            '#type' => 'markup',
-            '#markup' => '<div class="description"><em>' . t('No models found on the configured Ollama server.') . '</em></div>',
-            '#weight' => 100,
-          ];
-        }
-      }
-    }
-    catch (\Exception $e) {
-      watchdog('ai_provider_ollama', 'Failed to fetch Ollama models: @msg', ['@msg' => $e->getMessage()], WATCHDOG_WARNING);
-      if (isset($context['form']['providers'])) {
-        $context['form']['providers'][$context['provider'] . '_settings'][$context['provider'] . '_models'] = [
-          '#type' => 'markup',
-          '#markup' => '<div class="description"><em>' . t('Unable to fetch models from Ollama server.') . '</em></div>',
-          '#weight' => 100,
-        ];
-      }
-    }
-  }
 
   // Add custom submit handler to save Ollama settings into central ai.settings
   if (isset($context['form'])) {
