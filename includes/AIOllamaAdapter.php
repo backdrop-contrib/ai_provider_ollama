@@ -100,6 +100,7 @@ class AIOllamaAdapter extends AIAdapterBase {
         'thinking' => 'thinking',
         'insert' => 'insert',
         'audio' => 'audio',
+        'decision' => 'decision',
       ];
       $canonical = ai_normalize_capability_name($capability);
       if (isset($native_capabilities[$canonical])) {
@@ -261,6 +262,33 @@ class AIOllamaAdapter extends AIAdapterBase {
   public function moderation(string $input, string $model = 'omni-moderation-latest'): array {
     watchdog('ai_provider_ollama', 'Moderation is not supported by Ollama.', [], WATCHDOG_WARNING);
     throw new \RuntimeException('Moderation is not supported by Ollama.');
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Models with Ollama's "decision" capability answer through the native
+   * /v1/systemone endpoint; other models use the emulated fallback.
+   */
+  public function decide(string $input, array $questions, string $model = '', array $context_extra = []): array {
+    if (empty($questions)) {
+      return [];
+    }
+    if ($model === '') {
+      $model = (string) array_key_first($this->getModelsByCapability('decision'));
+    }
+    if ($model === '' || !in_array('decision', $this->getModelCapabilities($model), TRUE)) {
+      return parent::decide($input, $questions, $model, $context_extra);
+    }
+
+    [$question_map, $meta] = AIDecisionHelper::buildQuestions($questions);
+    $response = $this->makeRequest($this->baseUrl . '/systemone', [
+      'model' => $model,
+      'state' => $input,
+      'questions' => $question_map,
+    ], [], 'POST', 120);
+    $this->captureProviderUsage($response);
+    return AIDecisionHelper::parseAnswers($response, $meta);
   }
 
   /**

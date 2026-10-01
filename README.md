@@ -18,6 +18,11 @@ require `completion`. Audio metadata does not imply dedicated TTS/STT endpoint
 support. Native metadata does not enable currently unimplemented image, speech,
 or moderation methods in this adapter.
 
+Models with the `decision` capability (Ollama 0.35 or later) are listed as
+decision models, and `decide()` sends them to Ollama's `/v1/systemone`
+endpoint for typed answers with calibrated probabilities. Other models answer
+decisions through the AI module's tool-calling or JSON emulation.
+
 Metadata is cached for six hours; failed or missing metadata is cached for five
 minutes. The AI settings model-cache refresh clears this metadata too. Discovery
 does not run inference. Servers or proxies must expose `/api/show` for automatic
