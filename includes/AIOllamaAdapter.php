@@ -16,6 +16,9 @@ class AIOllamaAdapter extends AIAdapterBase {
   /** @var string Base URL including /v1 suffix. */
   protected $baseUrl;
 
+  /** @var array|null Model catalog reused across capability lookups. */
+  protected $models;
+
   /**
    * Constructor.
    *
@@ -31,7 +34,7 @@ class AIOllamaAdapter extends AIAdapterBase {
       ?: config_get('ai_provider_ollama.settings', 'base_url')
       ?: 'http://localhost:11434';
 
-    $this->baseUrl = rtrim($base, '/') . '/v1';
+    $this->baseUrl = preg_replace('#/v1$#', '', rtrim($base, '/')) . '/v1';
   }
 
   /**
@@ -48,6 +51,9 @@ class AIOllamaAdapter extends AIAdapterBase {
    * {@inheritdoc}
    */
   public function getModels(): array {
+    if ($this->models !== NULL) {
+      return $this->models;
+    }
     $models = [];
     try {
       $data = $this->makeRequest($this->baseUrl . '/models', [], [], 'GET', 10);
@@ -60,6 +66,7 @@ class AIOllamaAdapter extends AIAdapterBase {
       if (!empty($models)) {
         asort($models);
       }
+      $this->models = $models;
     }
     catch (\Exception $e) {
       watchdog('ai_provider_ollama', 'Failed to fetch models: @error', ['@error' => $e->getMessage()], WATCHDOG_ERROR);
@@ -70,13 +77,84 @@ class AIOllamaAdapter extends AIAdapterBase {
   /**
    * {@inheritdoc}
    *
-   * Ollama does not expose capability metadata. All models are returned for
-   * any capability. Site admins can override via hook_ai_model_capabilities_alter().
+   * Use native /api/show metadata; the compatible /v1/models list is untyped.
+   * Unknown models remain available through getModels() and manual overrides.
    */
   public function getModelsByCapability($capability): array {
     $models = $this->getModels();
-    backdrop_alter('ai_model_capabilities', $models, $capability, $this);
-    return $models;
+    $filtered = [];
+    $manual_applied = FALSE;
+
+    if (function_exists('ai_filter_models_by_manual_capability')) {
+      $filtered = ai_filter_models_by_manual_capability($models, 'ollama', $capability, $manual_applied);
+    }
+
+    if (!$manual_applied) {
+      $filtered = [];
+      $native_capabilities = [
+        'text' => 'completion',
+        'embeddings' => 'embedding',
+        'vision' => 'vision',
+        'tool_calling' => 'tools',
+        'tools' => 'tools',
+        'thinking' => 'thinking',
+        'insert' => 'insert',
+        'audio' => 'audio',
+      ];
+      $canonical = ai_normalize_capability_name($capability);
+      if (isset($native_capabilities[$canonical])) {
+        foreach ($models as $model => $label) {
+          $detected = $this->getModelCapabilities($model);
+          // Vision and tools use chat endpoints. Templates can advertise tools
+          // even on embedding-only models, which cannot perform chat calls.
+          $needs_chat = in_array($canonical, ['vision', 'tool_calling', 'tools', 'thinking', 'insert'], TRUE);
+          if ($needs_chat && !in_array('completion', $detected, TRUE)) {
+            continue;
+          }
+          if (in_array($native_capabilities[$canonical], $detected, TRUE)) {
+            $filtered[$model] = $label;
+          }
+        }
+      }
+    }
+
+    backdrop_alter('ai_model_capabilities', $filtered, $capability, $this);
+    return $filtered;
+  }
+
+  /**
+   * Fetch native capabilities without running inference or loading a model.
+   */
+  protected function getModelCapabilities(string $model): array {
+    // Include the server URL so changing servers cannot reuse old metadata.
+    // The prefix lets the AI settings model-refresh action clear this cache.
+    $cache_key = ai_models_cache_key('ollama', 'native_capabilities', [$this->baseUrl, $model]);
+    if ($cached = cache_get($cache_key, 'cache')) {
+      return $cached->data;
+    }
+
+    $capabilities = [];
+    $ttl = 300;
+    try {
+      $url = substr($this->baseUrl, 0, -3) . '/api/show';
+      $data = $this->makeRequest($url, ['model' => $model], [], 'POST', 10);
+      if (isset($data['capabilities']) && is_array($data['capabilities'])) {
+        $capabilities = array_values(array_filter($data['capabilities'], 'is_string'));
+        $ttl = 21600;
+      }
+      else {
+        watchdog('ai_provider_ollama', 'No capability metadata for @model. Update Ollama or configure manual model capabilities.', ['@model' => $model], WATCHDOG_WARNING);
+      }
+    }
+    catch (\Exception $e) {
+      watchdog('ai_provider_ollama', 'Could not discover capabilities for @model: @error. Configure manual model capabilities if the native API is unavailable.', [
+        '@model' => $model,
+        '@error' => $e->getMessage(),
+      ], WATCHDOG_WARNING);
+    }
+
+    cache_set($cache_key, $capabilities, 'cache', REQUEST_TIME + $ttl);
+    return $capabilities;
   }
 
   /** ------------------------ Text / Chat ------------------------ */
@@ -123,6 +201,23 @@ class AIOllamaAdapter extends AIAdapterBase {
       'temperature' => (float) $temperature,
       'max_tokens'  => (int) $max_tokens,
     ];
+
+    if (!empty($context_extra['response_format'])) {
+      $payload['response_format'] = $context_extra['response_format'];
+    }
+    elseif (!empty($context_extra['json_schema'])) {
+      $payload['response_format'] = [
+        'type' => 'json_schema',
+        'json_schema' => [
+          'name' => $context_extra['json_schema_name'] ?? 'response',
+          'strict' => TRUE,
+          'schema' => $context_extra['json_schema'],
+        ],
+      ];
+    }
+    elseif (!empty($context_extra['json_mode'])) {
+      $payload['response_format'] = ['type' => 'json_object'];
+    }
 
     if ($stream_response) {
       $payload['stream'] = TRUE;
@@ -209,6 +304,22 @@ class AIOllamaAdapter extends AIAdapterBase {
       ];
       if ((int) $max_tokens > 0) {
         $payload['max_tokens'] = (int) $max_tokens;
+      }
+      if (!empty($context_extra['response_format'])) {
+        $payload['response_format'] = $context_extra['response_format'];
+      }
+      elseif (!empty($context_extra['json_schema'])) {
+        $payload['response_format'] = [
+          'type' => 'json_schema',
+          'json_schema' => [
+            'name' => $context_extra['json_schema_name'] ?? 'response',
+            'strict' => TRUE,
+            'schema' => $context_extra['json_schema'],
+          ],
+        ];
+      }
+      elseif (!empty($context_extra['json_mode'])) {
+        $payload['response_format'] = ['type' => 'json_object'];
       }
       $result = $this->makeRequest($this->baseUrl . '/chat/completions', $payload, [], 'POST', 60);
       return $this->normalizeToolResponse($result);
