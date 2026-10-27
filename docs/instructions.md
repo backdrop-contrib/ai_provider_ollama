@@ -26,7 +26,7 @@ Ollama is a tool that lets you run large language models (LLMs) locally. It prov
 
 - AI module (parent module)
 - Ollama installed on your server or local machine
-- PHP 7.4+ with appropriate extensions
+- PHP 8.2+ with appropriate extensions
 
 ## Installation
 
