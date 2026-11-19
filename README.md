@@ -1,38 +1,18 @@
 # AI Provider Ollama
 
-Ollama local AI models provider for the Backdrop CMS AI module.
+Connect Backdrop’s AI features to an Ollama server you run. A locally installed model can process requests on your own hardware. Use it for chat, text generation, and search embeddings. Some models also support image input, tool calling, or typed decisions.
+
+## Requirements
+
+Backdrop CMS 1.x, PHP 8.2 or later, and the AI module. A reachable Ollama server with at least one installed model is required.
 
 ## Installation
 
-- Install this module using the official [Backdrop CMS instructions](https://backdropcms.org/user-guide/modules).
+1. Install and enable this module using the official [Backdrop CMS instructions](https://backdropcms.org/user-guide/modules).
+2. Open **AI settings** at `admin/config/ai/settings` and enable the provider.
+3. Set **Ollama Server URL** to an address Backdrop can reach. The default is `http://localhost:11434`. Local Ollama requires no API key.
 
-## Model capabilities
-
-The provider lists models through `/v1/models`, then reads each model's native
-`/api/show` capabilities to filter selectors: `completion` for chat/text,
-`embedding` for embeddings, `vision` for vision, and `tools` for tool calling.
-Model names are not used to guess capabilities. The base URL may include `/v1`.
-Capability lookups also recognize `thinking`, `insert` (fill-in-the-middle), and
-`audio` metadata. Vision, tool calling, thinking, and insertion additionally
-require `completion`. Audio metadata does not imply dedicated TTS/STT endpoint
-support. Native metadata does not enable currently unimplemented image, speech,
-or moderation methods in this adapter.
-
-Models with the `decision` capability (Ollama 0.35 or later) are listed as
-decision models, and `decide()` sends them to Ollama's `/v1/systemone`
-endpoint for typed answers with calibrated probabilities. Other models answer
-decisions through the AI module's tool-calling or JSON emulation.
-
-Metadata is cached for six hours; failed or missing metadata is cached for five
-minutes. The AI settings model-cache refresh clears this metadata too. Discovery
-does not run inference. Servers or proxies must expose `/api/show` for automatic
-classification. Models without metadata remain in the full catalog but are
-excluded from capability-specific selectors. Existing manual overrides at
-`admin/config/ai/settings/capabilities/ollama` and capability alter hooks still
-apply. Unsupported image, speech, and moderation operations have no automatic
-model selections.
-
-Run offline regression checks with `php tests/capabilities.php` from this module.
+Read the [module wiki](https://github.com/backdrop-contrib/ai_provider_ollama/wiki) for setup details, supported operations, and troubleshooting.
 
 ## Issues
 
